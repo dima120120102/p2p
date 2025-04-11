@@ -15,9 +15,16 @@ const peer = new Peer(generatePersistentId(), {
     secure: true,
     config: {
         iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' }
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+                urls: 'turn:openrelay.metered.ca:80',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            }
         ]
-    }
+    },
+    debug: 3 // Включаем подробное логирование PeerJS
 });
 
 // Элементы DOM
@@ -46,6 +53,7 @@ let isRecording = false;
 
 // Инициализация
 peer.on('open', (id) => {
+    console.log('PeerJS: Подключен с ID', id);
     yourIdElement.textContent = id;
     renderContacts();
     updateUI();
@@ -86,7 +94,7 @@ function connect() {
     
     peerIdInput.value = '';
     contactNameInput.value = '';
-    toggleAddContact(); // Скрываем форму после добавления
+    toggleAddContact();
     renderContacts();
     startChat(friendId);
 }
@@ -94,6 +102,7 @@ function connect() {
 // Начало чата с контактом
 function startChat(contactId) {
     if (activeConnection) {
+        console.log('Закрываем предыдущее соединение');
         activeConnection.close();
     }
     
@@ -101,9 +110,10 @@ function startChat(contactId) {
     const displayName = contactAliases[contactId] || contactId;
     chatHeader.textContent = `Чат с ${displayName}`;
     renderChatHistory(contactId);
-    chatArea.style.display = 'flex'; // Показываем чат
+    chatArea.style.display = 'flex';
     updateUI();
     
+    console.log('Попытка подключения к', contactId);
     const conn = peer.connect(contactId);
     setupConnection(conn);
 }
@@ -111,11 +121,16 @@ function startChat(contactId) {
 // Закрытие чата
 function closeChat() {
     if (activeConnection) {
+        console.log('Закрытие активного соединения');
         activeConnection.close();
         activeConnection = null;
     }
     activeContact = null;
-    chatArea.style.display = 'none'; // Скрываем чат
+    chatArea.classList.add('closing');
+    setTimeout(() => {
+        chatArea.style.display = 'none';
+        chatArea.classList.remove('closing');
+    }, 300); // Даём время для анимации
     chatHeader.textContent = 'Выберите контакт';
     chatBox.innerHTML = '';
     updateUI();
@@ -126,11 +141,13 @@ function setupConnection(conn) {
     activeConnection = conn;
     
     conn.on('open', () => {
+        console.log('Соединение установлено с', conn.peer);
         appendSystemMessage('✅ Подключение установлено');
         updateUI();
     });
     
     conn.on('data', (data) => {
+        console.log('Получены данные:', data);
         if (typeof data === 'string') {
             appendMessage({ type: 'text', content: data }, 'them');
             saveMessage({ type: 'text', content: data }, 'them');
@@ -144,20 +161,24 @@ function setupConnection(conn) {
     });
     
     conn.on('close', () => {
+        console.log('Соединение с', conn.peer, 'закрыто');
         appendSystemMessage('❌ Соединение закрыто');
         activeConnection = null;
         updateUI();
     });
     
     conn.on('error', (err) => {
-        console.error('Ошибка соединения:', err);
-        appendSystemMessage('⚠️ Ошибка соединения');
+        console.error('Ошибка соединения с', conn.peer, ':', err);
+        appendSystemMessage(`⚠️ Не удалось подключиться к ${contactAliases[conn.peer] || conn.peer}. Возможно, пользователь оффлайн.`);
+        activeConnection = null;
+        updateUI();
     });
 }
 
 // Приём входящих подключений
 peer.on('connection', (conn) => {
     const contactId = conn.peer;
+    console.log('Входящее соединение от', contactId);
     
     if (!contacts.includes(contactId)) {
         contacts.push(contactId);
@@ -184,6 +205,7 @@ function send() {
     if (!message) return;
     
     try {
+        console.log('Отправка сообщения:', message);
         activeConnection.send(message);
         appendMessage({ type: 'text', content: message }, 'you');
         saveMessage({ type: 'text', content: message }, 'you');
@@ -215,6 +237,7 @@ function startRecording() {
                     reader.onloadend = () => {
                         const base64Audio = reader.result;
                         const message = { type: 'audio', content: base64Audio };
+                        console.log('Отправка голосового сообщения');
                         activeConnection.send(message);
                         appendMessage(message, 'you');
                         saveMessage(message, 'you');
@@ -254,6 +277,7 @@ photoInput.addEventListener('change', () => {
     reader.onloadend = () => {
         const base64Image = reader.result;
         const message = { type: 'image', content: base64Image };
+        console.log('Отправка изображения');
         activeConnection.send(message);
         appendMessage(message, 'you');
         saveMessage(message, 'you');
@@ -411,6 +435,6 @@ messageInput.addEventListener('keypress', (e) => {
 });
 
 peer.on('error', (err) => {
-    console.error('Peer error:', err);
-    appendSystemMessage('⚠️ Произошла ошибка соединения');
+    console.error('PeerJS ошибка:', err);
+    appendSystemMessage('⚠️ Ошибка соединения. Проверьте сеть или попробуйте позже.');
 });
