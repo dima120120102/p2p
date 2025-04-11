@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 P2P Чат с контактами</title>
+    <title>P2P Чат с контактами</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="app.js" defer></script>
@@ -17,24 +17,26 @@
                 <span id="your-id">...</span>
                 <button onclick="copyId()">Копировать</button>
             </div>
-            <div id="connection-status" class="disconnected">🔴 Отключён</div>
         </header>
 
-        <div class="contacts">
-            <h3>Контакты:</h3>
-            <ul id="contacts-list"></ul>
-        </div>
+        <div class="main-content">
+            <div class="contacts-sidebar">
+                <h3>Контакты:</h3>
+                <div id="contacts-list"></div>
+                <div class="add-contact">
+                    <input type="text" id="peer-id" placeholder="ID нового контакта">
+                    <button onclick="connect()">Добавить</button>
+                </div>
+            </div>
 
-        <div class="connect-box">
-            <input type="text" id="peer-id" placeholder="Введи ID друга">
-            <button onclick="connect()">Подключиться</button>
-        </div>
-
-        <div id="chat" class="chat-box"></div>
-
-        <div class="message-box">
-            <input type="text" id="message" placeholder="Сообщение..." onkeypress="if(event.key=='Enter') send()">
-            <button onclick="send()">📤</button>
+            <div class="chat-area">
+                <div id="chat-header">Выберите контакт</div>
+                <div id="chat" class="chat-box"></div>
+                <div class="message-box">
+                    <input type="text" id="message" placeholder="Введите сообщение..." disabled>
+                    <button onclick="send()" disabled id="send-btn">Отправить</button>
+                </div>
+            </div>
         </div>
     </div>
 </body>
