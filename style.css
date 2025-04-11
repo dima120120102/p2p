@@ -129,8 +129,8 @@ header h1 {
 .edit-contact-btn {
     background: none;
     border: none;
-    padding: 4px;
-    font-size: 0.9rem;
+    padding: 6px;
+    font-size: 1rem;
     cursor: pointer;
     color: #4b5563;
     transition: color 0.2s, transform 0.2s;
@@ -214,17 +214,19 @@ header h1 {
 
 .message-box {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     margin-top: 12px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
-.message-box input {
+.message-box input[type="text"] {
     flex: 1;
     padding: 12px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 0.95rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    min-width: 150px;
 }
 
 .message-box input:focus {
@@ -237,11 +239,15 @@ header h1 {
     background: #2563eb;
     color: white;
     border: none;
-    padding: 12px 24px;
+    padding: 12px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.95rem;
     transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+    min-width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .message-box button:hover:not(:disabled) {
@@ -260,6 +266,14 @@ header h1 {
     cursor: not-allowed;
 }
 
+#record-btn.recording {
+    background: #dc2626;
+}
+
+#record-btn.recording:hover:not(:disabled) {
+    background: #b91c1c;
+}
+
 .message {
     margin-bottom: 12px;
     padding: 12px;
@@ -269,6 +283,12 @@ header h1 {
     line-height: 1.4;
     opacity: 0;
     animation: slideInMessage 0.3s ease-out forwards;
+}
+
+.message audio,
+.message img {
+    margin-top: 8px;
+    display: block;
 }
 
 .your-message {
@@ -376,16 +396,29 @@ header h1 {
         flex-direction: column;
     }
 
+    .add-contact input {
+        font-size: 0.9rem;
+    }
+
     .add-contact button {
         width: 100%;
+        font-size: 0.9rem;
     }
 
     .message-box {
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .message-box input[type="text"] {
+        width: 100%;
+        margin-bottom: 8px;
     }
 
     .message-box button {
-        width: 100%;
+        flex: 1;
+        padding: 10px;
+        font-size: 0.9rem;
     }
 
     .message {
@@ -393,7 +426,8 @@ header h1 {
     }
 
     .edit-contact-btn {
-        font-size: 0.85rem;
+        font-size: 1rem;
+        padding: 8px;
     }
 }
 
@@ -432,5 +466,10 @@ header h1 {
 
     #chat-header {
         font-size: 1rem;
+    }
+
+    .message-box button {
+        padding: 8px;
+        font-size: 0.85rem;
     }
 }
