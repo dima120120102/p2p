@@ -31,6 +31,8 @@ const chatHeader = document.getElementById('chat-header');
 const sendBtn = document.getElementById('send-btn');
 const recordBtn = document.getElementById('record-btn');
 const photoInput = document.getElementById('photo-input');
+const chatArea = document.querySelector('.chat-area');
+const addContactForm = document.querySelector('.add-contact');
 
 // Состояние приложения
 let activeConnection = null;
@@ -53,6 +55,11 @@ peer.on('open', (id) => {
 function copyId() {
     navigator.clipboard.writeText(yourIdElement.textContent);
     alert('ID скопирован!');
+}
+
+// Переключение формы добавления контакта
+function toggleAddContact() {
+    addContactForm.style.display = addContactForm.style.display === 'none' ? 'flex' : 'none';
 }
 
 // Подключение к новому контакту
@@ -79,6 +86,7 @@ function connect() {
     
     peerIdInput.value = '';
     contactNameInput.value = '';
+    toggleAddContact(); // Скрываем форму после добавления
     renderContacts();
     startChat(friendId);
 }
@@ -93,10 +101,24 @@ function startChat(contactId) {
     const displayName = contactAliases[contactId] || contactId;
     chatHeader.textContent = `Чат с ${displayName}`;
     renderChatHistory(contactId);
+    chatArea.style.display = 'flex'; // Показываем чат
     updateUI();
     
     const conn = peer.connect(contactId);
     setupConnection(conn);
+}
+
+// Закрытие чата
+function closeChat() {
+    if (activeConnection) {
+        activeConnection.close();
+        activeConnection = null;
+    }
+    activeContact = null;
+    chatArea.style.display = 'none'; // Скрываем чат
+    chatHeader.textContent = 'Выберите контакт';
+    chatBox.innerHTML = '';
+    updateUI();
 }
 
 // Настройка соединения
@@ -205,6 +227,7 @@ function startRecording() {
                 isRecording = true;
                 recordBtn.textContent = '⏹️';
                 recordBtn.title = 'Остановить запись';
+                recordBtn.classList.add('recording');
             })
             .catch(err => {
                 console.error('Ошибка записи:', err);
@@ -215,6 +238,7 @@ function startRecording() {
         isRecording = false;
         recordBtn.textContent = '🎙️';
         recordBtn.title = 'Записать голосовое сообщение';
+        recordBtn.classList.remove('recording');
     }
 }
 
