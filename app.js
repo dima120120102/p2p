@@ -41,6 +41,7 @@ const retryBox = document.querySelector('.retry-box');
 // Состояние приложения
 let activeConnection = null;
 let activeContact = null;
+const connections = new Map(); // Для отслеживания всех RTCPeerConnection
 const contacts = JSON.parse(localStorage.getItem('contacts')) || [];
 const chatHistories = JSON.parse(localStorage.getItem('chatHistories')) || {};
 const contactAliases = JSON.parse(localStorage.getItem('contactAliases')) || {};
@@ -53,6 +54,8 @@ let isVideoRecording = false;
 let replyingTo = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 3;
+const reconnectDelay = 3000; // Задержка между попытками переподключения (3 секунды)
+let isReconnecting = false; // Флаг для предотвращения параллельных переподключений
 
 // Инициализация
 peer.on('open', (id) => {
@@ -110,10 +113,8 @@ function startChat(contactId) {
         return;
     }
     
-    if (activeConnection) {
-        console.log('Закрываем предыдущее соединение с', activeContact);
-        activeConnection.close();
-    }
+    // Закрываем все существующие соединения
+    closeAllConnections();
     
     activeContact = contactId;
     const displayName = contactAliases[contactId] || contactId;
@@ -122,6 +123,7 @@ function startChat(contactId) {
     chatArea.style.display = 'flex';
     retryBox.style.display = 'none';
     reconnectAttempts = 0;
+    isReconnecting = false;
     if (unreadMessages[contactId]) {
         delete unreadMessages[contactId];
         saveUnreadMessages();
@@ -134,13 +136,24 @@ function startChat(contactId) {
     setupConnection(conn);
 }
 
-// Закрытие чата
-function closeChat() {
+// Закрытие всех соединений
+function closeAllConnections() {
     if (activeConnection) {
-        console.log('Закрытие активного соединения с', activeContact);
+        console.log('Закрываем активное соединение с', activeContact);
         activeConnection.close();
         activeConnection = null;
     }
+    
+    for (const [peerId, conn] of connections.entries()) {
+        console.log('Закрываем соединение с', peerId);
+        conn.close();
+        connections.delete(peerId);
+    }
+}
+
+// Закрытие чата
+function closeChat() {
+    closeAllConnections();
     activeContact = null;
     chatArea.classList.add('closing');
     setTimeout(() => {
@@ -159,6 +172,7 @@ function retryConnection() {
     if (activeContact) {
         console.log('Повторная попытка подключения к', activeContact);
         reconnectAttempts = 0;
+        isReconnecting = false;
         const conn = peer.connect(activeContact);
         setupConnection(conn);
     }
@@ -166,20 +180,35 @@ function retryConnection() {
 
 // Автоматическое переподключение
 function attemptReconnect(contactId) {
+    if (isReconnecting) {
+        console.log('Переподключение уже выполняется, пропускаем');
+        return;
+    }
+    
     if (reconnectAttempts >= maxReconnectAttempts) {
         appendSystemMessage(`⚠️ Достигнуто максимальное количество попыток переподключения (${maxReconnectAttempts})`);
         retryBox.style.display = 'block';
+        isReconnecting = false;
         return;
     }
     
     reconnectAttempts++;
+    isReconnecting = true;
     appendSystemMessage(`🔄 Попытка переподключения ${reconnectAttempts}/${maxReconnectAttempts}`);
-    const conn = peer.connect(contactId);
-    setupConnection(conn);
+    
+    // Закрываем старые соединения перед новой попыткой
+    closeAllConnections();
+    
+    setTimeout(() => {
+        const conn = peer.connect(contactId);
+        setupConnection(conn);
+    }, reconnectDelay);
 }
 
 // Настройка соединения
 function setupConnection(conn) {
+    // Сохраняем соединение в Map
+    connections.set(conn.peer, conn);
     activeConnection = conn;
     
     console.log('Настройка соединения с', conn.peer);
@@ -188,6 +217,7 @@ function setupConnection(conn) {
         console.log('Соединение успешно открыто с', conn.peer);
         appendSystemMessage(`✅ Подключение установлено с ${contactAliases[conn.peer] || conn.peer}`);
         reconnectAttempts = 0;
+        isReconnecting = false;
         retryBox.style.display = 'none';
         updateUI();
     });
@@ -214,10 +244,11 @@ function setupConnection(conn) {
     conn.on('close', () => {
         console.log('Соединение закрыто с', conn.peer, 'активный контакт:', activeContact);
         appendSystemMessage(`❌ Соединение с ${contactAliases[conn.peer] || conn.peer} закрыто`);
+        connections.delete(conn.peer);
         activeConnection = null;
         if (activeContact === conn.peer) {
             console.log('Запускаем переподключение к', conn.peer);
-            setTimeout(() => attemptReconnect(conn.peer), 2000);
+            attemptReconnect(conn.peer);
         }
         updateUI();
     });
@@ -225,11 +256,13 @@ function setupConnection(conn) {
     conn.on('error', (err) => {
         console.error('Ошибка соединения с', conn.peer, ':', err);
         appendSystemMessage(`⚠️ Ошибка подключения к ${contactAliases[conn.peer] || conn.peer}: ${err.message}`);
+        connections.delete(conn.peer);
         activeConnection = null;
         if (activeContact === conn.peer && err.type === 'peer-unavailable') {
             console.log('Запускаем переподключение из-за ошибки peer-unavailable для', conn.peer);
-            setTimeout(() => attemptReconnect(conn.peer), 2000);
+            attemptReconnect(conn.peer);
         } else {
+            isReconnecting = false;
             retryBox.style.display = 'block';
         }
         updateUI();
@@ -238,6 +271,13 @@ function setupConnection(conn) {
     conn.on('iceStateChange', (state) => {
         console.log('ICE state changed to', state, 'for', conn.peer);
         appendSystemMessage(`ℹ️ ICE состояние: ${state}`);
+        if (state === 'disconnected' || state === 'failed') {
+            connections.delete(conn.peer);
+            if (activeContact === conn.peer) {
+                console.log('ICE состояние:', state, 'запускаем переподключение');
+                attemptReconnect(conn.peer);
+            }
+        }
     });
 }
 
@@ -245,6 +285,13 @@ function setupConnection(conn) {
 peer.on('connection', (conn) => {
     const contactId = conn.peer;
     console.log('Входящее соединение от', contactId);
+    
+    // Проверяем, не слишком ли много соединений
+    if (connections.size >= 10) {
+        console.warn('Слишком много открытых соединений, закрываем входящее от', contactId);
+        conn.close();
+        return;
+    }
     
     if (!contacts.includes(contactId)) {
         console.log('Добавляем новый контакт:', contactId);
@@ -641,4 +688,5 @@ peer.on('disconnected', () => {
 peer.on('close', () => {
     console.log('PeerJS: Соединение полностью закрыто');
     appendSystemMessage('❌ PeerJS соединение закрыто');
+    closeAllConnections();
 });
