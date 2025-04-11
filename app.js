@@ -24,7 +24,7 @@ const peer = new Peer(generatePersistentId(), {
             }
         ]
     },
-    debug: 3
+    debug: 3 // Максимальный уровень логирования PeerJS
 });
 
 // Элементы DOM
@@ -60,6 +60,7 @@ let replyingTo = null;
 // Инициализация
 peer.on('open', (id) => {
     console.log('PeerJS: Подключен с ID', id);
+    appendSystemMessage(`✅ Ваш ID: ${id}`);
     yourIdElement.textContent = id;
     renderContacts();
     updateUI();
@@ -107,8 +108,13 @@ function connect() {
 
 // Начало чата с контактом
 function startChat(contactId) {
+    if (activeConnection && activeContact === contactId) {
+        console.log('Уже подключены к', contactId);
+        return; // Не закрываем и не пересоздаём соединение, если оно уже активно
+    }
+    
     if (activeConnection) {
-        console.log('Закрываем предыдущее соединение');
+        console.log('Закрываем предыдущее соединение с', activeContact);
         activeConnection.close();
     }
     
@@ -133,7 +139,7 @@ function startChat(contactId) {
 // Закрытие чата
 function closeChat() {
     if (activeConnection) {
-        console.log('Закрытие активного соединения');
+        console.log('Закрытие активного соединения с', activeContact);
         activeConnection.close();
         activeConnection = null;
     }
@@ -165,13 +171,13 @@ function setupConnection(conn) {
     
     conn.on('open', () => {
         console.log('Соединение установлено с', conn.peer);
-        appendSystemMessage('✅ Подключение установлено');
+        appendSystemMessage(`✅ Подключение установлено с ${contactAliases[conn.peer] || conn.peer}`);
         retryBox.style.display = 'none';
         updateUI();
     });
     
     conn.on('data', (data) => {
-        console.log('Получены данные:', data);
+        console.log('Получены данные от', conn.peer, ':', data);
         let message;
         if (typeof data === 'string') {
             message = { type: 'text', content: data };
@@ -184,23 +190,31 @@ function setupConnection(conn) {
         } else {
             unreadMessages[conn.peer] = (unreadMessages[conn.peer] || 0) + 1;
             saveUnreadMessages();
+            appendSystemMessage(`📩 Новое сообщение от ${contactAliases[conn.peer] || conn.peer}`);
             renderContacts();
         }
     });
     
     conn.on('close', () => {
         console.log('Соединение с', conn.peer, 'закрыто');
-        appendSystemMessage('❌ Соединение закрыто');
+        appendSystemMessage(`❌ Соединение с ${contactAliases[conn.peer] || conn.peer} закрыто`);
         activeConnection = null;
+        retryBox.style.display = 'block';
         updateUI();
     });
     
     conn.on('error', (err) => {
         console.error('Ошибка соединения с', conn.peer, ':', err);
-        appendSystemMessage(`⚠️ Не удалось подключиться к ${contactAliases[conn.peer] || conn.peer}. Возможно, пользователь оффлайн.`);
+        appendSystemMessage(`⚠️ Ошибка подключения к ${contactAliases[conn.peer] || conn.peer}: ${err.message}`);
         retryBox.style.display = 'block';
         activeConnection = null;
         updateUI();
+    });
+    
+    // Дополнительные события WebRTC для диагностики
+    conn.on('iceStateChange', (state) => {
+        console.log('ICE state changed to', state, 'for', conn.peer);
+        appendSystemMessage(`ℹ️ ICE состояние: ${state}`);
     });
 }
 
@@ -221,6 +235,11 @@ peer.on('connection', (conn) => {
     
     if (activeContact === contactId) {
         setupConnection(conn);
+    } else {
+        conn.on('open', () => {
+            console.log('Входящее соединение открыто от', contactId, 'но не активно');
+            conn.close(); // Закрываем, если контакт не выбран
+        });
     }
     
     renderContacts();
@@ -336,7 +355,6 @@ function startVideoRecording() {
                 videoBtn.title = 'Остановить запись';
                 videoBtn.classList.add('recording');
                 
-                // Ограничение на 15 секунд
                 setTimeout(() => {
                     if (isVideoRecording) {
                         mediaRecorder.stop();
@@ -424,7 +442,6 @@ function editContactName(contactId) {
 
 // Проверка статуса контакта
 function checkContactStatus(contactId) {
-    // Простая эмуляция статуса через PeerJS-соединение
     return new Promise((resolve) => {
         const conn = peer.connect(contactId);
         conn.on('open', () => {
@@ -432,7 +449,7 @@ function checkContactStatus(contactId) {
             resolve(true);
         });
         conn.on('error', () => resolve(false));
-        setTimeout(() => resolve(false), 2000); // Таймаут 2 секунды
+        setTimeout(() => resolve(false), 2000);
     });
 }
 
@@ -588,5 +605,16 @@ messageInput.addEventListener('keypress', (e) => {
 
 peer.on('error', (err) => {
     console.error('PeerJS ошибка:', err);
-    appendSystemMessage('⚠️ Ошибка соединения. Проверьте сеть или попробуйте позже.');
+    appendSystemMessage(`⚠️ Ошибка PeerJS: ${err.type} - ${err.message}`);
+});
+
+// Дополнительное логирование ICE-событий
+peer.on('disconnected', () => {
+    console.log('PeerJS: Отключен от сервера');
+    appendSystemMessage('⚠️ Отключен от сервера PeerJS');
+});
+
+peer.on('close', () => {
+    console.log('PeerJS: Соединение полностью закрыто');
+    appendSystemMessage('❌ PeerJS соединение закрыто');
 });
