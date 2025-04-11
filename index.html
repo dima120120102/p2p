@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 P2P Чат</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 P2P Чат</h1>
+            <div class="your-id">
+                <span>Твой ID:</span>
+                <span id="your-id">...</span>
+                <button onclick="copyId()">Копировать</button>
+            </div>
+        </header>
+
+        <div class="connect-box">
+            <input type="text" id="peer-id" placeholder="Вставь ID друга">
+            <button onclick="connect()">Подключиться</button>
+        </div>
+
+        <div id="chat" class="chat-box"></div>
+
+        <div class="message-box">
+            <input type="text" id="message" placeholder="Напиши сообщение...">
+            <button onclick="send()">📤</button>
+        </div>
+    </div>
+</body>
+</html>
