@@ -151,3 +151,14 @@ header {
     border: none;
     cursor: pointer;
 }
+.contact {
+    padding: 8px;
+    margin: 5px 0;
+    background: #f0f0f0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.contact:hover {
+    background: #e0e0e0;
+}
