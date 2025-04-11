@@ -42,9 +42,13 @@
                 <div class="message-box">
                     <input type="text" id="message" placeholder="Введите сообщение..." disabled>
                     <button onclick="startRecording()" id="record-btn" disabled title="Записать голосовое сообщение">🎙️</button>
+                    <button onclick="startVideoRecording()" id="video-btn" disabled title="Записать видео в кружочке">🎥</button>
                     <input type="file" id="photo-input" accept="image/*" style="display: none;">
                     <button onclick="document.getElementById('photo-input').click()" id="photo-btn" disabled title="Отправить фото">📷</button>
                     <button onclick="send()" disabled id="send-btn">Отправить</button>
+                </div>
+                <div class="retry-box" style="display: none;">
+                    <button onclick="retryConnection()" id="retry-btn">Попробовать снова</button>
                 </div>
             </div>
         </div>
