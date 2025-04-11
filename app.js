@@ -23,6 +23,7 @@ const peer = new Peer(generatePersistentId(), {
 // Элементы DOM
 const yourIdElement = document.getElementById('your-id');
 const peerIdInput = document.getElementById('peer-id');
+const contactNameInput = document.getElementById('contact-name');
 const chatBox = document.getElementById('chat');
 const messageInput = document.getElementById('message');
 const contactsList = document.getElementById('contacts-list');
@@ -34,6 +35,7 @@ let activeConnection = null;
 let activeContact = null;
 const contacts = JSON.parse(localStorage.getItem('contacts')) || [];
 const chatHistories = JSON.parse(localStorage.getItem('chatHistories')) || {};
+const contactAliases = JSON.parse(localStorage.getItem('contactAliases')) || {};
 
 // Инициализация
 peer.on('open', (id) => {
@@ -51,12 +53,18 @@ function copyId() {
 // Подключение к новому контакту
 function connect() {
     const friendId = peerIdInput.value.trim();
+    const contactName = contactNameInput.value.trim();
     if (!friendId) return alert('Введите ID контакта!');
     if (friendId === peer.id) return alert('Нельзя добавить самого себя!');
     
     if (!contacts.includes(friendId)) {
         contacts.push(friendId);
         localStorage.setItem('contacts', JSON.stringify(contacts));
+        
+        if (contactName) {
+            contactAliases[friendId] = contactName;
+            localStorage.setItem('contactAliases', JSON.stringify(contactAliases));
+        }
         
         if (!chatHistories[friendId]) {
             chatHistories[friendId] = [];
@@ -65,19 +73,20 @@ function connect() {
     }
     
     peerIdInput.value = '';
+    contactNameInput.value = '';
     renderContacts();
     startChat(friendId);
 }
 
 // Начало чата с контактом
 function startChat(contactId) {
-    // Закрываем предыдущее соединение
     if (activeConnection) {
         activeConnection.close();
     }
     
     activeContact = contactId;
-    chatHeader.textContent = `Чат с ${contactId}`;
+    const displayName = contactAliases[contactId] || contactId;
+    chatHeader.textContent = `Чат с ${displayName}`;
     renderChatHistory(contactId);
     updateUI();
     
@@ -169,6 +178,25 @@ function saveChatHistories() {
     localStorage.setItem('chatHistories', JSON.stringify(chatHistories));
 }
 
+// Редактирование имени контакта
+function editContactName(contactId) {
+    const newName = prompt('Введите новое имя для контакта:', contactAliases[contactId] || '');
+    if (newName !== null) {
+        const trimmedName = newName.trim();
+        if (trimmedName) {
+            contactAliases[contactId] = trimmedName;
+        } else {
+            delete contactAliases[contactId]; // Удаляем алиас, если имя пустое
+        }
+        localStorage.setItem('contactAliases', JSON.stringify(contactAliases));
+        renderContacts();
+        if (activeContact === contactId) {
+            const displayName = contactAliases[contactId] || contactId;
+            chatHeader.textContent = `Чат с ${displayName}`;
+        }
+    }
+}
+
 // Отображение контактов
 function renderContacts() {
     contactsList.innerHTML = '';
@@ -179,15 +207,19 @@ function renderContacts() {
     }
     
     contacts.forEach(contactId => {
+        const displayName = contactAliases[contactId] || contactId;
         const contactElement = document.createElement('div');
         contactElement.className = 'contact';
-        contactElement.textContent = contactId;
+        contactElement.innerHTML = `
+            <span class="contact-name">${displayName}</span>
+            <button class="edit-contact-btn" onclick="editContactName('${contactId}')">✎</button>
+        `;
         
         if (contactId === activeContact) {
             contactElement.classList.add('active-contact');
         }
         
-        contactElement.onclick = () => {
+        contactElement.querySelector('.contact-name').onclick = () => {
             startChat(contactId);
         };
         
@@ -216,12 +248,13 @@ function appendMessage(message, sender) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('message');
     
+    const displayName = contactAliases[activeContact] || activeContact;
     if (sender === 'you') {
         messageElement.classList.add('your-message');
         messageElement.textContent = `Вы: ${message}`;
     } else {
         messageElement.classList.add('their-message');
-        messageElement.textContent = `${activeContact}: ${message}`;
+        messageElement.textContent = `${displayName}: ${message}`;
     }
     
     chatBox.appendChild(messageElement);
