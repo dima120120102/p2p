@@ -1,74 +1,89 @@
-// Генерация постоянного ID на основе UserAgent
+// Генерация постоянного ID
 function generatePersistentId() {
-    const data = navigator.userAgent + window.screen.width + window.screen.height;
-    let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-        hash = (hash << 5) - hash + data.charCodeAt(i);
-        hash |= 0;
-    }
-    return 'user-' + Math.abs(hash).toString(36).substring(0, 8);
+    const savedId = localStorage.getItem('peerId');
+    if (savedId) return savedId;
+    
+    const randomId = 'peer-' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('peerId', randomId);
+    return randomId;
 }
 
-// Инициализация Peer с минимальной конфигурацией
-const persistentId = localStorage.getItem('peerId') || generatePersistentId();
-localStorage.setItem('peerId', persistentId);
-
-const peer = new Peer(persistentId, {
+// Инициализация Peer
+const peer = new Peer(generatePersistentId(), {
     host: '0.peerjs.com',
     port: 443,
     secure: true,
     config: {
         iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' } // Только базовый STUN
+            { urls: 'stun:stun.l.google.com:19302' }
         ]
     }
 });
 
-// Сохраняем подключённых собеседников
-let contacts = JSON.parse(localStorage.getItem('contacts')) || [];
+// Элементы DOM
+const yourIdElement = document.getElementById('your-id');
+const peerIdInput = document.getElementById('peer-id');
+const chatBox = document.getElementById('chat');
+const messageInput = document.getElementById('message');
+const contactsList = document.getElementById('contacts-list');
+
+// Состояние приложения
 let activeConnection = null;
+const contacts = JSON.parse(localStorage.getItem('contacts')) || [];
 
-// Показываем ID
-document.getElementById('your-id').textContent = persistentId;
-
-// Обработчики событий PeerJS
-peer.on('open', () => {
-    console.log('Peer готов, ID:', persistentId);
+// Показываем ID при подключении
+peer.on('open', (id) => {
+    yourIdElement.textContent = id;
     renderContacts();
 });
 
-peer.on('connection', (conn) => {
-    activeConnection = conn;
-    addContact(conn.peer);
-    setupConnection(conn);
-});
+// Функция копирования ID
+function copyId() {
+    navigator.clipboard.writeText(yourIdElement.textContent);
+    alert('ID скопирован!');
+}
 
-// Функция подключения
+// Подключение к другому пиру
 function connect() {
-    const peerId = document.getElementById('peer-id').value.trim();
-    if (!peerId) return alert('Введите ID друга');
+    const friendId = peerIdInput.value.trim();
+    if (!friendId) return alert('Введите ID друга!');
     
-    const conn = peer.connect(peerId);
+    const conn = peer.connect(friendId);
     setupConnection(conn);
-    addContact(peerId);
+    addContact(friendId);
 }
 
 // Настройка соединения
 function setupConnection(conn) {
     conn.on('open', () => {
-        document.getElementById('connection-status').textContent = '🟢 Подключён';
-        document.getElementById('connection-status').className = 'connected';
+        activeConnection = conn;
+        appendMessage('✅ Подключение установлено', 'system');
+        
+        window.send = () => {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            conn.send(message);
+            appendMessage(message, 'you');
+            messageInput.value = '';
+        };
     });
-
+    
     conn.on('data', (data) => {
-        appendMessage(`Друг: ${data}`);
+        appendMessage(data, 'them');
     });
-
+    
     conn.on('close', () => {
-        document.getElementById('connection-status').textContent = '🔴 Отключён';
-        document.getElementById('connection-status').className = 'disconnected';
+        appendMessage('❌ Соединение закрыто', 'system');
+        activeConnection = null;
     });
 }
+
+// Приём входящих подключений
+peer.on('connection', (conn) => {
+    setupConnection(conn);
+    addContact(conn.peer);
+});
 
 // Добавление контакта
 function addContact(peerId) {
@@ -79,44 +94,43 @@ function addContact(peerId) {
     }
 }
 
-// Отправка сообщения
-function send() {
-    if (!activeConnection) return alert('Нет активного подключения');
-    
-    const message = document.getElementById('message').value;
-    if (!message) return;
-    
-    activeConnection.send(message);
-    appendMessage(`Вы: ${message}`);
-    document.getElementById('message').value = '';
-}
-
 // Отображение контактов
 function renderContacts() {
-    const list = document.getElementById('contacts-list');
-    list.innerHTML = '';
-    
+    contactsList.innerHTML = '';
     contacts.forEach(contactId => {
-        const li = document.createElement('li');
-        li.textContent = contactId;
-        li.onclick = () => {
+        const contactElement = document.createElement('div');
+        contactElement.className = 'contact';
+        contactElement.textContent = contactId;
+        contactElement.onclick = () => {
             const conn = peer.connect(contactId);
             setupConnection(conn);
         };
-        list.appendChild(li);
+        contactsList.appendChild(contactElement);
     });
 }
 
-// Вспомогательные функции
-function appendMessage(message) {
-    const chatBox = document.getElementById('chat');
+// Добавление сообщений в чат
+function appendMessage(message, sender) {
     const messageElement = document.createElement('div');
-    messageElement.textContent = message;
+    messageElement.classList.add('message');
+    
+    if (sender === 'you') {
+        messageElement.classList.add('your-message');
+        messageElement.textContent = `Вы: ${message}`;
+    } else if (sender === 'them') {
+        messageElement.classList.add('their-message');
+        messageElement.textContent = `Друг: ${message}`;
+    } else {
+        messageElement.style.textAlign = 'center';
+        messageElement.style.color = '#7f8c8d';
+        messageElement.textContent = message;
+    }
+    
     chatBox.appendChild(messageElement);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function copyId() {
-    navigator.clipboard.writeText(persistentId);
-    alert('ID скопирован!');
-}
+// Отправка по Enter
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') send();
+});
