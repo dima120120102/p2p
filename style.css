@@ -34,6 +34,7 @@ header h1 {
     font-size: 1.75rem;
     margin: 0 0 16px;
     color: #111827;
+    animation: fadeIn 0.5s ease-out;
 }
 
 .your-id {
@@ -45,6 +46,7 @@ header h1 {
     gap: 12px;
     font-size: 0.95rem;
     flex-wrap: wrap;
+    animation: slideInUp 0.5s ease-out;
 }
 
 .your-id button {
@@ -55,11 +57,18 @@ header h1 {
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: background 0.2s;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
 .your-id button:hover {
     background: #1d4ed8;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.your-id button:active {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .main-content {
@@ -87,33 +96,37 @@ header h1 {
     background: white;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s;
     border: 1px solid #e5e7eb;
     font-size: 0.95rem;
+    transition: all 0.3s ease;
+    animation: slideInLeft 0.3s ease-out;
 }
 
 .contact:hover {
     background: #f0f5ff;
     border-color: #bfdbfe;
+    transform: translateX(4px);
 }
 
 .active-contact {
     background: #2563eb;
     color: white;
     border-color: #2563eb;
+    transform: translateX(0);
 }
 
 .add-contact {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
 }
 
 .add-contact input {
-    flex: 1;
     padding: 10px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .add-contact input:focus {
@@ -130,11 +143,18 @@ header h1 {
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.95rem;
-    transition: background 0.2s;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
 .add-contact button:hover {
     background: #15803d;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.add-contact button:active {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 #chat-header {
@@ -144,6 +164,7 @@ header h1 {
     border-radius: 8px 8px 0 0;
     border-bottom: 1px solid #e5e7eb;
     font-size: 1.1rem;
+    animation: fadeIn 0.5s ease-out;
 }
 
 .chat-area {
@@ -173,6 +194,7 @@ header h1 {
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .message-box input:focus {
@@ -189,11 +211,18 @@ header h1 {
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.95rem;
-    transition: background 0.2s;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
 .message-box button:hover:not(:disabled) {
     background: #1d4ed8;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.message-box button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .message-box button:disabled {
@@ -208,6 +237,8 @@ header h1 {
     max-width: 75%;
     font-size: 0.95rem;
     line-height: 1.4;
+    opacity: 0;
+    animation: slideInMessage 0.3s ease-out forwards;
 }
 
 .your-message {
@@ -227,6 +258,8 @@ header h1 {
     font-size: 0.85rem;
     margin: 12px 0;
     font-style: italic;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
 }
 
 /* Scrollbar */
@@ -245,6 +278,27 @@ header h1 {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #9ca3af;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideInUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+    from { transform: translateX(-20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInMessage {
+    from { transform: translateY(10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 /* Адаптивность */
