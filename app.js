@@ -10,17 +10,13 @@ function generatePersistentId() {
 
 // Инициализация Peer
 const peer = new Peer(generatePersistentId(), {
-    host: '0.peerjs.com',
+    host: '0.peerjs.com', // Можно заменить на 'peerjs-server.herokuapp.com' для теста
     port: 443,
     secure: true,
     config: {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject', transport: 'tcp' }
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
         ]
     },
     debug: 3
@@ -125,7 +121,7 @@ function startChat(contactId) {
     renderChatHistory(contactId);
     chatArea.style.display = 'flex';
     retryBox.style.display = 'none';
-    reconnectAttempts = 0; // Сбрасываем попытки переподключения
+    reconnectAttempts = 0;
     if (unreadMessages[contactId]) {
         delete unreadMessages[contactId];
         saveUnreadMessages();
@@ -162,7 +158,7 @@ function closeChat() {
 function retryConnection() {
     if (activeContact) {
         console.log('Повторная попытка подключения к', activeContact);
-        reconnectAttempts = 0; // Сбрасываем попытки
+        reconnectAttempts = 0;
         const conn = peer.connect(activeContact);
         setupConnection(conn);
     }
@@ -186,10 +182,12 @@ function attemptReconnect(contactId) {
 function setupConnection(conn) {
     activeConnection = conn;
     
+    console.log('Настройка соединения с', conn.peer);
+    
     conn.on('open', () => {
-        console.log('Соединение установлено с', conn.peer);
+        console.log('Соединение успешно открыто с', conn.peer);
         appendSystemMessage(`✅ Подключение установлено с ${contactAliases[conn.peer] || conn.peer}`);
-        reconnectAttempts = 0; // Сбрасываем попытки при успешном подключении
+        reconnectAttempts = 0;
         retryBox.style.display = 'none';
         updateUI();
     });
@@ -214,11 +212,12 @@ function setupConnection(conn) {
     });
     
     conn.on('close', () => {
-        console.log('Соединение с', conn.peer, 'закрыто');
+        console.log('Соединение закрыто с', conn.peer, 'активный контакт:', activeContact);
         appendSystemMessage(`❌ Соединение с ${contactAliases[conn.peer] || conn.peer} закрыто`);
         activeConnection = null;
         if (activeContact === conn.peer) {
-            setTimeout(() => attemptReconnect(conn.peer), 2000); // Переподключаемся через 2 секунды
+            console.log('Запускаем переподключение к', conn.peer);
+            setTimeout(() => attemptReconnect(conn.peer), 2000);
         }
         updateUI();
     });
@@ -228,6 +227,7 @@ function setupConnection(conn) {
         appendSystemMessage(`⚠️ Ошибка подключения к ${contactAliases[conn.peer] || conn.peer}: ${err.message}`);
         activeConnection = null;
         if (activeContact === conn.peer && err.type === 'peer-unavailable') {
+            console.log('Запускаем переподключение из-за ошибки peer-unavailable для', conn.peer);
             setTimeout(() => attemptReconnect(conn.peer), 2000);
         } else {
             retryBox.style.display = 'block';
@@ -247,6 +247,7 @@ peer.on('connection', (conn) => {
     console.log('Входящее соединение от', contactId);
     
     if (!contacts.includes(contactId)) {
+        console.log('Добавляем новый контакт:', contactId);
         contacts.push(contactId);
         localStorage.setItem('contacts', JSON.stringify(contacts));
         
@@ -257,10 +258,11 @@ peer.on('connection', (conn) => {
     }
     
     if (activeContact === contactId) {
+        console.log('Устанавливаем соединение с', contactId, 'как активное');
         setupConnection(conn);
     } else {
+        console.log('Закрываем входящее соединение от', contactId, 'так как активный контакт:', activeContact);
         conn.on('open', () => {
-            console.log('Входящее соединение открыто от', contactId, 'но не активно');
             conn.close();
         });
     }
