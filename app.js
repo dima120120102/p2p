@@ -17,14 +17,13 @@ const peer = new Peer(generatePersistentId(), {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-            {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            }
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject', transport: 'tcp' }
         ]
     },
-    debug: 3 // Максимальный уровень логирования PeerJS
+    debug: 3
 });
 
 // Элементы DOM
@@ -56,6 +55,8 @@ let videoChunks = [];
 let isRecording = false;
 let isVideoRecording = false;
 let replyingTo = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 3;
 
 // Инициализация
 peer.on('open', (id) => {
@@ -110,7 +111,7 @@ function connect() {
 function startChat(contactId) {
     if (activeConnection && activeContact === contactId) {
         console.log('Уже подключены к', contactId);
-        return; // Не закрываем и не пересоздаём соединение, если оно уже активно
+        return;
     }
     
     if (activeConnection) {
@@ -124,6 +125,7 @@ function startChat(contactId) {
     renderChatHistory(contactId);
     chatArea.style.display = 'flex';
     retryBox.style.display = 'none';
+    reconnectAttempts = 0; // Сбрасываем попытки переподключения
     if (unreadMessages[contactId]) {
         delete unreadMessages[contactId];
         saveUnreadMessages();
@@ -160,9 +162,24 @@ function closeChat() {
 function retryConnection() {
     if (activeContact) {
         console.log('Повторная попытка подключения к', activeContact);
+        reconnectAttempts = 0; // Сбрасываем попытки
         const conn = peer.connect(activeContact);
         setupConnection(conn);
     }
+}
+
+// Автоматическое переподключение
+function attemptReconnect(contactId) {
+    if (reconnectAttempts >= maxReconnectAttempts) {
+        appendSystemMessage(`⚠️ Достигнуто максимальное количество попыток переподключения (${maxReconnectAttempts})`);
+        retryBox.style.display = 'block';
+        return;
+    }
+    
+    reconnectAttempts++;
+    appendSystemMessage(`🔄 Попытка переподключения ${reconnectAttempts}/${maxReconnectAttempts}`);
+    const conn = peer.connect(contactId);
+    setupConnection(conn);
 }
 
 // Настройка соединения
@@ -172,6 +189,7 @@ function setupConnection(conn) {
     conn.on('open', () => {
         console.log('Соединение установлено с', conn.peer);
         appendSystemMessage(`✅ Подключение установлено с ${contactAliases[conn.peer] || conn.peer}`);
+        reconnectAttempts = 0; // Сбрасываем попытки при успешном подключении
         retryBox.style.display = 'none';
         updateUI();
     });
@@ -199,19 +217,24 @@ function setupConnection(conn) {
         console.log('Соединение с', conn.peer, 'закрыто');
         appendSystemMessage(`❌ Соединение с ${contactAliases[conn.peer] || conn.peer} закрыто`);
         activeConnection = null;
-        retryBox.style.display = 'block';
+        if (activeContact === conn.peer) {
+            setTimeout(() => attemptReconnect(conn.peer), 2000); // Переподключаемся через 2 секунды
+        }
         updateUI();
     });
     
     conn.on('error', (err) => {
         console.error('Ошибка соединения с', conn.peer, ':', err);
         appendSystemMessage(`⚠️ Ошибка подключения к ${contactAliases[conn.peer] || conn.peer}: ${err.message}`);
-        retryBox.style.display = 'block';
         activeConnection = null;
+        if (activeContact === conn.peer && err.type === 'peer-unavailable') {
+            setTimeout(() => attemptReconnect(conn.peer), 2000);
+        } else {
+            retryBox.style.display = 'block';
+        }
         updateUI();
     });
     
-    // Дополнительные события WebRTC для диагностики
     conn.on('iceStateChange', (state) => {
         console.log('ICE state changed to', state, 'for', conn.peer);
         appendSystemMessage(`ℹ️ ICE состояние: ${state}`);
@@ -238,7 +261,7 @@ peer.on('connection', (conn) => {
     } else {
         conn.on('open', () => {
             console.log('Входящее соединение открыто от', contactId, 'но не активно');
-            conn.close(); // Закрываем, если контакт не выбран
+            conn.close();
         });
     }
     
@@ -608,7 +631,6 @@ peer.on('error', (err) => {
     appendSystemMessage(`⚠️ Ошибка PeerJS: ${err.type} - ${err.message}`);
 });
 
-// Дополнительное логирование ICE-событий
 peer.on('disconnected', () => {
     console.log('PeerJS: Отключен от сервера');
     appendSystemMessage('⚠️ Отключен от сервера PeerJS');
