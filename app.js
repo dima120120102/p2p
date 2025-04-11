@@ -24,7 +24,7 @@ const peer = new Peer(generatePersistentId(), {
             }
         ]
     },
-    debug: 3 // Включаем подробное логирование PeerJS
+    debug: 3
 });
 
 // Элементы DOM
@@ -37,9 +37,11 @@ const contactsList = document.getElementById('contacts-list');
 const chatHeader = document.getElementById('chat-header');
 const sendBtn = document.getElementById('send-btn');
 const recordBtn = document.getElementById('record-btn');
+const videoBtn = document.getElementById('video-btn');
 const photoInput = document.getElementById('photo-input');
 const chatArea = document.querySelector('.chat-area');
 const addContactForm = document.querySelector('.add-contact');
+const retryBox = document.querySelector('.retry-box');
 
 // Состояние приложения
 let activeConnection = null;
@@ -47,9 +49,13 @@ let activeContact = null;
 const contacts = JSON.parse(localStorage.getItem('contacts')) || [];
 const chatHistories = JSON.parse(localStorage.getItem('chatHistories')) || {};
 const contactAliases = JSON.parse(localStorage.getItem('contactAliases')) || {};
+const unreadMessages = JSON.parse(localStorage.getItem('unreadMessages')) || {};
 let mediaRecorder = null;
 let audioChunks = [];
+let videoChunks = [];
 let isRecording = false;
+let isVideoRecording = false;
+let replyingTo = null;
 
 // Инициализация
 peer.on('open', (id) => {
@@ -111,6 +117,12 @@ function startChat(contactId) {
     chatHeader.textContent = `Чат с ${displayName}`;
     renderChatHistory(contactId);
     chatArea.style.display = 'flex';
+    retryBox.style.display = 'none';
+    if (unreadMessages[contactId]) {
+        delete unreadMessages[contactId];
+        saveUnreadMessages();
+    }
+    renderContacts();
     updateUI();
     
     console.log('Попытка подключения к', contactId);
@@ -130,10 +142,21 @@ function closeChat() {
     setTimeout(() => {
         chatArea.style.display = 'none';
         chatArea.classList.remove('closing');
-    }, 300); // Даём время для анимации
+    }, 300);
     chatHeader.textContent = 'Выберите контакт';
     chatBox.innerHTML = '';
+    replyingTo = null;
+    messageInput.placeholder = 'Введите сообщение...';
     updateUI();
+}
+
+// Повторная попытка подключения
+function retryConnection() {
+    if (activeContact) {
+        console.log('Повторная попытка подключения к', activeContact);
+        const conn = peer.connect(activeContact);
+        setupConnection(conn);
+    }
 }
 
 // Настройка соединения
@@ -143,20 +166,25 @@ function setupConnection(conn) {
     conn.on('open', () => {
         console.log('Соединение установлено с', conn.peer);
         appendSystemMessage('✅ Подключение установлено');
+        retryBox.style.display = 'none';
         updateUI();
     });
     
     conn.on('data', (data) => {
         console.log('Получены данные:', data);
+        let message;
         if (typeof data === 'string') {
-            appendMessage({ type: 'text', content: data }, 'them');
-            saveMessage({ type: 'text', content: data }, 'them');
-        } else if (data.type === 'audio') {
-            appendMessage(data, 'them');
-            saveMessage(data, 'them');
-        } else if (data.type === 'image') {
-            appendMessage(data, 'them');
-            saveMessage(data, 'them');
+            message = { type: 'text', content: data };
+        } else {
+            message = data;
+        }
+        if (activeContact === conn.peer) {
+            appendMessage(message, 'them');
+            saveMessage(message, 'them');
+        } else {
+            unreadMessages[conn.peer] = (unreadMessages[conn.peer] || 0) + 1;
+            saveUnreadMessages();
+            renderContacts();
         }
     });
     
@@ -170,6 +198,7 @@ function setupConnection(conn) {
     conn.on('error', (err) => {
         console.error('Ошибка соединения с', conn.peer, ':', err);
         appendSystemMessage(`⚠️ Не удалось подключиться к ${contactAliases[conn.peer] || conn.peer}. Возможно, пользователь оффлайн.`);
+        retryBox.style.display = 'block';
         activeConnection = null;
         updateUI();
     });
@@ -201,15 +230,21 @@ peer.on('connection', (conn) => {
 function send() {
     if (!activeConnection || !activeContact) return;
     
-    const message = messageInput.value.trim();
-    if (!message) return;
+    const messageContent = messageInput.value.trim();
+    if (!messageContent) return;
+    
+    const message = replyingTo
+        ? { type: 'text', content: messageContent, replyTo: replyingTo }
+        : { type: 'text', content: messageContent };
     
     try {
         console.log('Отправка сообщения:', message);
         activeConnection.send(message);
-        appendMessage({ type: 'text', content: message }, 'you');
-        saveMessage({ type: 'text', content: message }, 'you');
+        appendMessage(message, 'you');
+        saveMessage(message, 'you');
         messageInput.value = '';
+        replyingTo = null;
+        messageInput.placeholder = 'Введите сообщение...';
     } catch (err) {
         console.error('Ошибка отправки:', err);
         appendSystemMessage('⚠️ Не удалось отправить сообщение');
@@ -265,6 +300,66 @@ function startRecording() {
     }
 }
 
+// Запись видео в кружочке
+function startVideoRecording() {
+    if (!activeConnection || !activeContact) return;
+    
+    if (!isVideoRecording) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                videoChunks = [];
+                
+                mediaRecorder.ondataavailable = (e) => {
+                    videoChunks.push(e.data);
+                };
+                
+                mediaRecorder.onstop = () => {
+                    const videoBlob = new Blob(videoChunks, { type: 'video/webm' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(videoBlob);
+                    reader.onloadend = () => {
+                        const base64Video = reader.result;
+                        const message = { type: 'video', content: base64Video };
+                        console.log('Отправка видео в кружочке');
+                        activeConnection.send(message);
+                        appendMessage(message, 'you');
+                        saveMessage(message, 'you');
+                    };
+                    
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.start();
+                isVideoRecording = true;
+                videoBtn.textContent = '⏹️';
+                videoBtn.title = 'Остановить запись';
+                videoBtn.classList.add('recording');
+                
+                // Ограничение на 15 секунд
+                setTimeout(() => {
+                    if (isVideoRecording) {
+                        mediaRecorder.stop();
+                        isVideoRecording = false;
+                        videoBtn.textContent = '🎥';
+                        videoBtn.title = 'Записать видео в кружочке';
+                        videoBtn.classList.remove('recording');
+                    }
+                }, 15000);
+            })
+            .catch(err => {
+                console.error('Ошибка записи видео:', err);
+                appendSystemMessage('⚠️ Не удалось начать запись видео');
+            });
+    } else {
+        mediaRecorder.stop();
+        isVideoRecording = false;
+        videoBtn.textContent = '🎥';
+        videoBtn.title = 'Записать видео в кружочке';
+        videoBtn.classList.remove('recording');
+    }
+}
+
 // Отправка фотографии
 photoInput.addEventListener('change', () => {
     if (!activeConnection || !activeContact) return;
@@ -304,6 +399,10 @@ function saveChatHistories() {
     localStorage.setItem('chatHistories', JSON.stringify(chatHistories));
 }
 
+function saveUnreadMessages() {
+    localStorage.setItem('unreadMessages', JSON.stringify(unreadMessages));
+}
+
 // Редактирование имени контакта
 function editContactName(contactId) {
     const newName = prompt('Введите новое имя для контакта:', contactAliases[contactId] || '');
@@ -323,8 +422,22 @@ function editContactName(contactId) {
     }
 }
 
+// Проверка статуса контакта
+function checkContactStatus(contactId) {
+    // Простая эмуляция статуса через PeerJS-соединение
+    return new Promise((resolve) => {
+        const conn = peer.connect(contactId);
+        conn.on('open', () => {
+            conn.close();
+            resolve(true);
+        });
+        conn.on('error', () => resolve(false));
+        setTimeout(() => resolve(false), 2000); // Таймаут 2 секунды
+    });
+}
+
 // Отображение контактов
-function renderContacts() {
+async function renderContacts() {
     contactsList.innerHTML = '';
     
     if (contacts.length === 0) {
@@ -332,12 +445,17 @@ function renderContacts() {
         return;
     }
     
-    contacts.forEach(contactId => {
+    for (const contactId of contacts) {
         const displayName = contactAliases[contactId] || contactId;
+        const isOnline = await checkContactStatus(contactId);
+        const unreadCount = unreadMessages[contactId] || 0;
+        
         const contactElement = document.createElement('div');
         contactElement.className = 'contact';
         contactElement.innerHTML = `
+            <span class="status-indicator ${isOnline ? 'online' : 'offline'}"></span>
             <span class="contact-name">${displayName}</span>
+            ${unreadCount > 0 ? `<span class="unread-count">${unreadCount}</span>` : ''}
             <button class="edit-contact-btn" onclick="editContactName('${contactId}')">✎</button>
         `;
         
@@ -350,7 +468,7 @@ function renderContacts() {
         };
         
         contactsList.appendChild(contactElement);
-    });
+    }
 }
 
 // Отображение истории чата
@@ -362,17 +480,18 @@ function renderChatHistory(contactId) {
         return;
     }
     
-    chatHistories[contactId].forEach(msg => {
-        appendMessage(msg, msg.sender);
+    chatHistories[contactId].forEach((msg, index) => {
+        appendMessage(msg, msg.sender, index);
     });
     
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 // Добавление сообщений в чат
-function appendMessage(message, sender) {
+function appendMessage(message, sender, index) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('message');
+    messageElement.dataset.index = index;
     
     const displayName = contactAliases[activeContact] || activeContact;
     if (sender === 'you') {
@@ -381,27 +500,59 @@ function appendMessage(message, sender) {
         messageElement.classList.add('their-message');
     }
     
+    const contentElement = document.createElement('div');
+    contentElement.classList.add('message-content');
+    
+    if (message.replyTo) {
+        const replyElement = document.createElement('div');
+        replyElement.classList.add('reply-preview');
+        const repliedMsg = chatHistories[activeContact][message.replyTo];
+        replyElement.textContent = repliedMsg ? `${repliedMsg.sender === 'you' ? 'Вы' : displayName}: ${repliedMsg.content}` : 'Сообщение удалено';
+        messageElement.appendChild(replyElement);
+    }
+    
     if (message.type === 'text') {
-        messageElement.textContent = sender === 'you' ? `Вы: ${message.content}` : `${displayName}: ${message.content}`;
+        contentElement.textContent = sender === 'you' ? `Вы: ${message.content}` : `${displayName}: ${message.content}`;
     } else if (message.type === 'audio') {
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.src = message.content;
         audio.style.maxWidth = '100%';
-        messageElement.appendChild(audio);
+        contentElement.appendChild(audio);
         const label = document.createElement('div');
         label.textContent = sender === 'you' ? 'Вы (голосовое):' : `${displayName} (голосовое):`;
-        messageElement.insertBefore(label, audio);
+        contentElement.insertBefore(label, audio);
     } else if (message.type === 'image') {
         const img = document.createElement('img');
         img.src = message.content;
         img.style.maxWidth = '100%';
         img.style.borderRadius = '8px';
-        messageElement.appendChild(img);
+        contentElement.appendChild(img);
         const label = document.createElement('div');
         label.textContent = sender === 'you' ? 'Вы (фото):' : `${displayName} (фото):`;
-        messageElement.insertBefore(label, img);
+        contentElement.insertBefore(label, img);
+    } else if (message.type === 'video') {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.src = message.content;
+        video.classList.add('circle-video');
+        contentElement.appendChild(video);
+        const label = document.createElement('div');
+        label.textContent = sender === 'you' ? 'Вы (видео):' : `${displayName} (видео):`;
+        contentElement.insertBefore(label, video);
     }
+    
+    messageElement.appendChild(contentElement);
+    
+    const replyBtn = document.createElement('button');
+    replyBtn.classList.add('reply-btn');
+    replyBtn.textContent = 'Ответить';
+    replyBtn.onclick = () => {
+        replyingTo = index;
+        messageInput.placeholder = `Ответ на: ${message.content.slice(0, 20)}...`;
+        messageInput.focus();
+    };
+    messageElement.appendChild(replyBtn);
     
     chatBox.appendChild(messageElement);
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -421,6 +572,7 @@ function updateUI() {
     messageInput.disabled = !isActive;
     sendBtn.disabled = !isActive;
     recordBtn.disabled = !isActive;
+    videoBtn.disabled = !isActive;
     photoInput.disabled = !isActive;
     document.getElementById('photo-btn').disabled = !isActive;
     
