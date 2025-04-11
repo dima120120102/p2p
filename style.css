@@ -95,11 +95,13 @@ header h1 {
     margin: 6px 0;
     background: white;
     border-radius: 6px;
-    cursor: pointer;
     border: 1px solid #e5e7eb;
     font-size: 0.95rem;
     transition: all 0.3s ease;
     animation: slideInLeft 0.3s ease-out;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .contact:hover {
@@ -113,6 +115,34 @@ header h1 {
     color: white;
     border-color: #2563eb;
     transform: translateX(0);
+}
+
+.active-contact .edit-contact-btn {
+    color: white;
+}
+
+.contact-name {
+    flex: 1;
+    cursor: pointer;
+}
+
+.edit-contact-btn {
+    background: none;
+    border: none;
+    padding: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: #4b5563;
+    transition: color 0.2s, transform 0.2s;
+}
+
+.edit-contact-btn:hover {
+    color: #2563eb;
+    transform: scale(1.2);
+}
+
+.edit-contact-btn:active {
+    transform: scale(1);
 }
 
 .add-contact {
@@ -360,6 +390,10 @@ header h1 {
 
     .message {
         max-width: 85%;
+    }
+
+    .edit-contact-btn {
+        font-size: 0.85rem;
     }
 }
 
