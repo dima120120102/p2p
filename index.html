@@ -21,17 +21,23 @@
 
         <div class="main-content">
             <div class="contacts-sidebar">
-                <h3>Контакты:</h3>
-                <div id="contacts-list"></div>
-                <div class="add-contact">
+                <div class="contacts-header">
+                    <h3>Контакты:</h3>
+                    <button class="add-contact-toggle" onclick="toggleAddContact()">+</button>
+                </div>
+                <div class="add-contact" style="display: none;">
                     <input type="text" id="peer-id" placeholder="ID нового контакта">
                     <input type="text" id="contact-name" placeholder="Имя контакта (опционально)">
                     <button onclick="connect()">Добавить</button>
                 </div>
+                <div id="contacts-list"></div>
             </div>
 
-            <div class="chat-area">
-                <div id="chat-header">Выберите контакт</div>
+            <div class="chat-area" style="display: none;">
+                <div class="chat-header">
+                    <div id="chat-header">Выберите контакт</div>
+                    <button class="back-btn" onclick="closeChat()">← Назад</button>
+                </div>
                 <div id="chat" class="chat-box"></div>
                 <div class="message-box">
                     <input type="text" id="message" placeholder="Введите сообщение..." disabled>
