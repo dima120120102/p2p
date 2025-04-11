@@ -1,4 +1,4 @@
-// Генерация постоянного ID
+// Генерация постоянного ID на основе UserAgent
 function generatePersistentId() {
     const data = navigator.userAgent + window.screen.width + window.screen.height;
     let hash = 0;
@@ -9,7 +9,7 @@ function generatePersistentId() {
     return 'user-' + Math.abs(hash).toString(36).substring(0, 8);
 }
 
-// Инициализация Peer с корректными ICE серверами
+// Инициализация Peer с минимальной конфигурацией
 const persistentId = localStorage.getItem('peerId') || generatePersistentId();
 localStorage.setItem('peerId', persistentId);
 
@@ -19,159 +19,104 @@ const peer = new Peer(persistentId, {
     secure: true,
     config: {
         iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }, // Убрали ?transport=udp
-            { 
-                urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-                username: 'YOUR_TWILIO_USERNAME', // Замените на реальные данные
-                credential: 'YOUR_TWILIO_CREDENTIAL'
-            }
+            { urls: 'stun:stun.l.google.com:19302' } // Только базовый STUN
         ]
-    },
-    pingInterval: 5000
+    }
 });
 
-// ... остальной код остаётся без изменений ...
-
-// Состояние приложения
+// Сохраняем подключённых собеседников
+let contacts = JSON.parse(localStorage.getItem('contacts')) || [];
 let activeConnection = null;
-const contacts = JSON.parse(localStorage.getItem('contacts')) || [];
-let chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || {};
 
-// DOM элементы
-const yourIdElement = document.getElementById('your-id');
-const peerIdInput = document.getElementById('peer-id');
-const chatBox = document.getElementById('chat');
-const messageInput = document.getElementById('message');
-const contactsList = document.getElementById('contacts-list');
-const connectionStatus = document.getElementById('connection-status');
+// Показываем ID
+document.getElementById('your-id').textContent = persistentId;
 
-// Инициализация
-yourIdElement.textContent = persistentId;
-renderContacts();
-renderChatHistory();
-
-// Обработчики PeerJS
+// Обработчики событий PeerJS
 peer.on('open', () => {
-    console.log('Peer готов к подключениям');
+    console.log('Peer готов, ID:', persistentId);
+    renderContacts();
 });
 
 peer.on('connection', (conn) => {
+    activeConnection = conn;
+    addContact(conn.peer);
     setupConnection(conn);
-    addContactIfNew(conn.peer);
 });
 
-// Функции
-function setupConnection(conn) {
-    activeConnection = conn;
-    updateStatus('connected');
-    
-    conn.on('data', (data) => {
-        appendMessage(data, 'them');
-        saveMessage(data, 'them', conn.peer);
-    });
-    
-    conn.on('close', () => {
-        updateStatus('disconnected');
-        activeConnection = null;
-    });
-}
-
-function addContactIfNew(peerId) {
-    if (!contacts.some(c => c.id === peerId)) {
-        contacts.push({
-            id: peerId,
-            name: `Друг ${contacts.length + 1}`
-        });
-        saveContacts();
-        renderContacts();
-    }
-}
-
+// Функция подключения
 function connect() {
-    const peerId = peerIdInput.value.trim();
+    const peerId = document.getElementById('peer-id').value.trim();
     if (!peerId) return alert('Введите ID друга');
     
     const conn = peer.connect(peerId);
     setupConnection(conn);
-    addContactIfNew(peerId);
-    peerIdInput.value = '';
+    addContact(peerId);
 }
 
+// Настройка соединения
+function setupConnection(conn) {
+    conn.on('open', () => {
+        document.getElementById('connection-status').textContent = '🟢 Подключён';
+        document.getElementById('connection-status').className = 'connected';
+    });
+
+    conn.on('data', (data) => {
+        appendMessage(`Друг: ${data}`);
+    });
+
+    conn.on('close', () => {
+        document.getElementById('connection-status').textContent = '🔴 Отключён';
+        document.getElementById('connection-status').className = 'disconnected';
+    });
+}
+
+// Добавление контакта
+function addContact(peerId) {
+    if (!contacts.includes(peerId)) {
+        contacts.push(peerId);
+        localStorage.setItem('contacts', JSON.stringify(contacts));
+        renderContacts();
+    }
+}
+
+// Отправка сообщения
 function send() {
     if (!activeConnection) return alert('Нет активного подключения');
     
-    const message = messageInput.value.trim();
+    const message = document.getElementById('message').value;
     if (!message) return;
     
     activeConnection.send(message);
-    appendMessage(message, 'you');
-    saveMessage(message, 'you', activeConnection.peer);
-    messageInput.value = '';
+    appendMessage(`Вы: ${message}`);
+    document.getElementById('message').value = '';
 }
 
+// Отображение контактов
 function renderContacts() {
-    contactsList.innerHTML = '';
-    contacts.forEach(contact => {
+    const list = document.getElementById('contacts-list');
+    list.innerHTML = '';
+    
+    contacts.forEach(contactId => {
         const li = document.createElement('li');
-        li.innerHTML = `
-            <span>${contact.name}</span>
-            <span class="peer-id">${contact.id.substring(0, 8)}...</span>
-            <button class="delete-contact" onclick="deleteContact('${contact.id}')">×</button>
-        `;
-        li.onclick = () => startChatWithContact(contact.id);
-        contactsList.appendChild(li);
+        li.textContent = contactId;
+        li.onclick = () => {
+            const conn = peer.connect(contactId);
+            setupConnection(conn);
+        };
+        list.appendChild(li);
     });
 }
 
-function startChatWithContact(peerId) {
-    const conn = peer.connect(peerId);
-    setupConnection(conn);
-}
-
-function deleteContact(peerId) {
-    const index = contacts.findIndex(c => c.id === peerId);
-    if (index !== -1) {
-        contacts.splice(index, 1);
-        saveContacts();
-        renderContacts();
-    }
-    event.stopPropagation();
-}
-
-function appendMessage(message, sender) {
+// Вспомогательные функции
+function appendMessage(message) {
+    const chatBox = document.getElementById('chat');
     const messageElement = document.createElement('div');
-    messageElement.classList.add('message');
-    messageElement.classList.add(sender === 'you' ? 'your-message' : 'their-message');
-    messageElement.textContent = `${sender === 'you' ? 'Вы' : 'Друг'}: ${message}`;
+    messageElement.textContent = message;
     chatBox.appendChild(messageElement);
     chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-function saveMessage(message, sender, peerId) {
-    if (!chatHistory[peerId]) chatHistory[peerId] = [];
-    chatHistory[peerId].push({
-        text: message,
-        sender: sender,
-        timestamp: new Date().toISOString()
-    });
-    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-}
-
-function renderChatHistory() {
-    // Можно добавить отображение истории для выбранного контакта
-}
-
-function updateStatus(status) {
-    connectionStatus.textContent = status === 'connected' ? '🟢 Подключён' : '🔴 Отключён';
-    connectionStatus.className = status;
 }
 
 function copyId() {
     navigator.clipboard.writeText(persistentId);
     alert('ID скопирован!');
-}
-
-function saveContacts() {
-    localStorage.setItem('contacts', JSON.stringify(contacts));
 }
