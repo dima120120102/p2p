@@ -7,57 +7,74 @@ if (savedPeerId) {
     peer = new Peer();
     peer.on('open', (id) => {
         localStorage.setItem('peerId', id);
+        document.getElementById('your-id').textContent = id;
     });
 }
 
-// Загрузка истории чата
+// Загрузка контактов и истории
+let contacts = JSON.parse(localStorage.getItem('contacts')) || [];
 let chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || [];
 
-// Показываем ID при подключении
+// Показываем ID и контакты
 peer.on('open', (id) => {
     document.getElementById('your-id').textContent = id;
-    // Показываем историю
+    renderContacts();
     renderChatHistory();
 });
 
-// Генерация QR-кода
-function showQR() {
-    const container = document.getElementById('qr-container');
-    container.classList.remove('qr-hidden');
-    QRCode.toCanvas(container, peer.id, { width: 200 }, (error) => {
-        if (error) console.error(error);
+// Отображение контактов
+function renderContacts() {
+    const list = document.getElementById('contacts-list');
+    list.innerHTML = '';
+    
+    contacts.forEach(contact => {
+        const li = document.createElement('li');
+        li.textContent = contact.name || contact.id;
+        li.onclick = () => startChat(contact.id);
+        list.appendChild(li);
     });
 }
 
-// Сканирование QR-кода
-function scanQR() {
-    const modal = document.getElementById('qr-scanner');
-    modal.classList.remove('modal-hidden');
+// Подключение к новому собеседнику
+function connect() {
+    const friendId = document.getElementById('peer-id').value.trim();
+    if (!friendId) return alert('Введи ID друга!');
     
-    const video = document.getElementById('qr-video');
-    const scanner = new Instascan.Scanner({ video: video });
+    // Проверяем, есть ли уже такой контакт
+    if (!contacts.some(c => c.id === friendId)) {
+        contacts.push({ id: friendId, name: `Друг ${contacts.length + 1}` });
+        localStorage.setItem('contacts', JSON.stringify(contacts));
+        renderContacts();
+    }
     
-    scanner.addListener('scan', function (content) {
-        document.getElementById('peer-id').value = content;
-        hideScanner();
+    startChat(friendId);
+}
+
+// Начать чат с выбранным контактом
+function startChat(friendId) {
+    const conn = peer.connect(friendId);
+    
+    conn.on('open', () => {
+        appendMessage(`✅ Подключён к ${friendId}`, 'system');
+        
+        window.send = () => {
+            const message = document.getElementById('message').value.trim();
+            if (!message) return;
+            
+            conn.send(message);
+            appendMessage(message, 'you');
+            document.getElementById('message').value = '';
+        };
     });
     
-    Instascan.Camera.getCameras().then(function (cameras) {
-        if (cameras.length > 0) {
-            scanner.start(cameras[0]);
-        } else {
-            alert('Камера не найдена!');
-        }
+    conn.on('data', (data) => {
+        appendMessage(data, 'them');
     });
 }
 
-function hideScanner() {
-    document.getElementById('qr-scanner').classList.add('modal-hidden');
-}
+// Остальные функции (appendMessage, renderChatHistory) остаются как в предыдущей версии
 
-// Остальные функции (connect, send и т.д.) остаются как были
-
-// Сохранение сообщений
+// Сохраняем сообщения при отправке/получении
 function appendMessage(message, sender) {
     const messageData = {
         text: message,
@@ -69,37 +86,4 @@ function appendMessage(message, sender) {
     localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
     
     renderMessage(messageData);
-}
-
-// Отображение истории
-function renderChatHistory() {
-    chatHistory.forEach(renderMessage);
-}
-
-function renderMessage(messageData) {
-    const chatBox = document.getElementById('chat');
-    const messageElement = document.createElement('div');
-    messageElement.classList.add('message');
-    
-    if (messageData.sender === 'you') {
-        messageElement.classList.add('your-message');
-        messageElement.textContent = `Вы: ${messageData.text}`;
-    } else if (messageData.sender === 'them') {
-        messageElement.classList.add('their-message');
-        messageElement.textContent = `Друг: ${messageData.text}`;
-    } else {
-        messageElement.style.textAlign = 'center';
-        messageElement.style.color = '#7f8c8d';
-        messageElement.textContent = messageData.text;
-    }
-    
-    chatBox.appendChild(messageElement);
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-// Очистка истории (по желанию)
-function clearHistory() {
-    localStorage.removeItem('chatHistory');
-    chatHistory = [];
-    document.getElementById('chat').innerHTML = '';
 }
