@@ -56,6 +56,7 @@ let reconnectAttempts = 0;
 const maxReconnectAttempts = 3;
 const reconnectDelay = 3000; // Задержка между попытками переподключения (3 секунды)
 let isReconnecting = false; // Флаг для предотвращения параллельных переподключений
+const failedConnections = new Set(); // Для отслеживания пиров, к которым не удалось подключиться
 
 // Инициализация
 peer.on('open', (id) => {
@@ -78,11 +79,18 @@ function toggleAddContact() {
 }
 
 // Подключение к новому контакту
-function connect() {
+async function connect() {
     const friendId = peerIdInput.value.trim();
     const contactName = contactNameInput.value.trim();
     if (!friendId) return alert('Введите ID контакта!');
     if (friendId === peer.id) return alert('Нельзя добавить самого себя!');
+    
+    // Проверяем, доступен ли пир перед добавлением
+    const isOnline = await checkContactStatus(friendId);
+    if (!isOnline) {
+        alert('Контакт недоступен. Проверьте ID или убедитесь, что контакт онлайн.');
+        return;
+    }
     
     if (!contacts.includes(friendId)) {
         contacts.push(friendId);
@@ -107,9 +115,18 @@ function connect() {
 }
 
 // Начало чата с контактом
-function startChat(contactId) {
+async function startChat(contactId) {
     if (activeConnection && activeContact === contactId) {
         console.log('Уже подключены к', contactId);
+        return;
+    }
+    
+    // Проверяем, доступен ли контакт
+    const isOnline = await checkContactStatus(contactId);
+    if (!isOnline) {
+        appendSystemMessage(`⚠️ Контакт ${contactAliases[contactId] || contactId} недоступен.`);
+        failedConnections.add(contactId);
+        renderContacts();
         return;
     }
     
@@ -124,6 +141,7 @@ function startChat(contactId) {
     retryBox.style.display = 'none';
     reconnectAttempts = 0;
     isReconnecting = false;
+    failedConnections.delete(contactId); // Удаляем из списка недоступных, если контакт стал доступен
     if (unreadMessages[contactId]) {
         delete unreadMessages[contactId];
         saveUnreadMessages();
@@ -173,13 +191,14 @@ function retryConnection() {
         console.log('Повторная попытка подключения к', activeContact);
         reconnectAttempts = 0;
         isReconnecting = false;
+        failedConnections.delete(activeContact);
         const conn = peer.connect(activeContact);
         setupConnection(conn);
     }
 }
 
 // Автоматическое переподключение
-function attemptReconnect(contactId) {
+async function attemptReconnect(contactId) {
     if (isReconnecting) {
         console.log('Переподключение уже выполняется, пропускаем');
         return;
@@ -188,7 +207,20 @@ function attemptReconnect(contactId) {
     if (reconnectAttempts >= maxReconnectAttempts) {
         appendSystemMessage(`⚠️ Достигнуто максимальное количество попыток переподключения (${maxReconnectAttempts})`);
         retryBox.style.display = 'block';
+        failedConnections.add(contactId);
         isReconnecting = false;
+        renderContacts();
+        return;
+    }
+    
+    // Проверяем, доступен ли контакт перед переподключением
+    const isOnline = await checkContactStatus(contactId);
+    if (!isOnline) {
+        appendSystemMessage(`⚠️ Контакт ${contactAliases[contactId] || contactId} недоступен. Переподключение отменено.`);
+        failedConnections.add(contactId);
+        retryBox.style.display = 'block';
+        isReconnecting = false;
+        renderContacts();
         return;
     }
     
@@ -219,6 +251,7 @@ function setupConnection(conn) {
         reconnectAttempts = 0;
         isReconnecting = false;
         retryBox.style.display = 'none';
+        failedConnections.delete(conn.peer);
         updateUI();
     });
     
@@ -263,7 +296,9 @@ function setupConnection(conn) {
             attemptReconnect(conn.peer);
         } else {
             isReconnecting = false;
+            failedConnections.add(conn.peer);
             retryBox.style.display = 'block';
+            renderContacts();
         }
         updateUI();
     });
@@ -512,6 +547,30 @@ function editContactName(contactId) {
     }
 }
 
+// Удаление контакта
+function deleteContact(contactId) {
+    if (confirm(`Удалить контакт ${contactAliases[contactId] || contactId}?`)) {
+        const index = contacts.indexOf(contactId);
+        if (index !== -1) {
+            contacts.splice(index, 1);
+            localStorage.setItem('contacts', JSON.stringify(contacts));
+        }
+        delete chatHistories[contactId];
+        saveChatHistories();
+        delete contactAliases[contactId];
+        localStorage.setItem('contactAliases', JSON.stringify(contactAliases));
+        delete unreadMessages[contactId];
+        saveUnreadMessages();
+        failedConnections.delete(contactId);
+        
+        if (activeContact === contactId) {
+            closeChat();
+        }
+        
+        renderContacts();
+    }
+}
+
 // Проверка статуса контакта
 function checkContactStatus(contactId) {
     return new Promise((resolve) => {
@@ -536,7 +595,7 @@ async function renderContacts() {
     
     for (const contactId of contacts) {
         const displayName = contactAliases[contactId] || contactId;
-        const isOnline = await checkContactStatus(contactId);
+        const isOnline = failedConnections.has(contactId) ? false : await checkContactStatus(contactId);
         const unreadCount = unreadMessages[contactId] || 0;
         
         const contactElement = document.createElement('div');
@@ -546,6 +605,7 @@ async function renderContacts() {
             <span class="contact-name">${displayName}</span>
             ${unreadCount > 0 ? `<span class="unread-count">${unreadCount}</span>` : ''}
             <button class="edit-contact-btn" onclick="editContactName('${contactId}')">✎</button>
+            <button class="delete-contact-btn" onclick="deleteContact('${contactId}')">🗑️</button>
         `;
         
         if (contactId === activeContact) {
