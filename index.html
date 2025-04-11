@@ -17,22 +17,23 @@
                 <span id="your-id">...</span>
                 <button onclick="copyId()">Копировать</button>
             </div>
+            <div id="connection-status" class="disconnected">🔴 Отключён</div>
         </header>
 
         <div class="contacts">
-            <h3>Собеседники:</h3>
+            <h3>Контакты:</h3>
             <ul id="contacts-list"></ul>
         </div>
 
         <div class="connect-box">
-            <input type="text" id="peer-id" placeholder="Введи ID нового друга">
+            <input type="text" id="peer-id" placeholder="Введи ID друга">
             <button onclick="connect()">Подключиться</button>
         </div>
 
         <div id="chat" class="chat-box"></div>
 
         <div class="message-box">
-            <input type="text" id="message" placeholder="Напиши сообщение...">
+            <input type="text" id="message" placeholder="Сообщение..." onkeypress="if(event.key=='Enter') send()">
             <button onclick="send()">📤</button>
         </div>
     </div>
