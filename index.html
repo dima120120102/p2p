@@ -3,30 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 Улучшенный P2P Чат</title>
+    <title>🚀 P2P Чат с контактами</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="app.js" defer></script>
-    <script src="https://rawgit.com/schmich/instascan-builds/master/instascan.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🌐 Улучшенный P2P Чат</h1>
+            <h1>🌐 P2P Чат</h1>
             <div class="your-id">
                 <span>Твой ID:</span>
                 <span id="your-id">...</span>
                 <button onclick="copyId()">Копировать</button>
-                <button onclick="showQR()">Показать QR</button>
             </div>
-            <div id="qr-container" class="qr-hidden"></div>
         </header>
 
+        <div class="contacts">
+            <h3>Собеседники:</h3>
+            <ul id="contacts-list"></ul>
+        </div>
+
         <div class="connect-box">
-            <input type="text" id="peer-id" placeholder="Вставь ID друга">
+            <input type="text" id="peer-id" placeholder="Введи ID нового друга">
             <button onclick="connect()">Подключиться</button>
-            <button onclick="scanQR()">Сканировать QR</button>
         </div>
 
         <div id="chat" class="chat-box"></div>
@@ -34,14 +34,6 @@
         <div class="message-box">
             <input type="text" id="message" placeholder="Напиши сообщение...">
             <button onclick="send()">📤</button>
-        </div>
-    </div>
-
-    <div id="qr-scanner" class="modal-hidden">
-        <div class="modal-content">
-            <h3>Наведите камеру на QR-код</h3>
-            <video id="qr-video" width="300" height="300"></video>
-            <button onclick="hideScanner()">Закрыть</button>
         </div>
     </div>
 </body>
