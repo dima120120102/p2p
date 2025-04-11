@@ -9,7 +9,7 @@ function generatePersistentId() {
     return 'user-' + Math.abs(hash).toString(36).substring(0, 8);
 }
 
-// Инициализация Peer
+// Инициализация Peer с корректными ICE серверами
 const persistentId = localStorage.getItem('peerId') || generatePersistentId();
 localStorage.setItem('peerId', persistentId);
 
@@ -20,16 +20,18 @@ const peer = new Peer(persistentId, {
     config: {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
+            { urls: 'stun:global.stun.twilio.com:3478' }, // Убрали ?transport=udp
             { 
-                urls: 'turn:numb.viagenie.ca',
-                username: 'your-email@example.com',
-                credential: 'your-password'
+                urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+                username: 'YOUR_TWILIO_USERNAME', // Замените на реальные данные
+                credential: 'YOUR_TWILIO_CREDENTIAL'
             }
         ]
     },
     pingInterval: 5000
 });
+
+// ... остальной код остаётся без изменений ...
 
 // Состояние приложения
 let activeConnection = null;
