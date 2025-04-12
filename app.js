@@ -79,18 +79,11 @@ function toggleAddContact() {
 }
 
 // Подключение к новому контакту
-async function connect() {
+function connect() {
     const friendId = peerIdInput.value.trim();
     const contactName = contactNameInput.value.trim();
     if (!friendId) return alert('Введите ID контакта!');
     if (friendId === peer.id) return alert('Нельзя добавить самого себя!');
-    
-    // Проверяем, доступен ли пир перед добавлением
-    const isOnline = await checkContactStatus(friendId);
-    if (!isOnline) {
-        alert('Контакт недоступен. Проверьте ID или убедитесь, что контакт онлайн.');
-        return;
-    }
     
     if (!contacts.includes(friendId)) {
         contacts.push(friendId);
@@ -115,18 +108,9 @@ async function connect() {
 }
 
 // Начало чата с контактом
-async function startChat(contactId) {
+function startChat(contactId) {
     if (activeConnection && activeContact === contactId) {
         console.log('Уже подключены к', contactId);
-        return;
-    }
-    
-    // Проверяем, доступен ли контакт
-    const isOnline = await checkContactStatus(contactId);
-    if (!isOnline) {
-        appendSystemMessage(`⚠️ Контакт ${contactAliases[contactId] || contactId} недоступен.`);
-        failedConnections.add(contactId);
-        renderContacts();
         return;
     }
     
@@ -141,7 +125,6 @@ async function startChat(contactId) {
     retryBox.style.display = 'none';
     reconnectAttempts = 0;
     isReconnecting = false;
-    failedConnections.delete(contactId); // Удаляем из списка недоступных, если контакт стал доступен
     if (unreadMessages[contactId]) {
         delete unreadMessages[contactId];
         saveUnreadMessages();
@@ -198,7 +181,7 @@ function retryConnection() {
 }
 
 // Автоматическое переподключение
-async function attemptReconnect(contactId) {
+function attemptReconnect(contactId) {
     if (isReconnecting) {
         console.log('Переподключение уже выполняется, пропускаем');
         return;
@@ -208,17 +191,6 @@ async function attemptReconnect(contactId) {
         appendSystemMessage(`⚠️ Достигнуто максимальное количество попыток переподключения (${maxReconnectAttempts})`);
         retryBox.style.display = 'block';
         failedConnections.add(contactId);
-        isReconnecting = false;
-        renderContacts();
-        return;
-    }
-    
-    // Проверяем, доступен ли контакт перед переподключением
-    const isOnline = await checkContactStatus(contactId);
-    if (!isOnline) {
-        appendSystemMessage(`⚠️ Контакт ${contactAliases[contactId] || contactId} недоступен. Переподключение отменено.`);
-        failedConnections.add(contactId);
-        retryBox.style.display = 'block';
         isReconnecting = false;
         renderContacts();
         return;
@@ -571,21 +543,8 @@ function deleteContact(contactId) {
     }
 }
 
-// Проверка статуса контакта
-function checkContactStatus(contactId) {
-    return new Promise((resolve) => {
-        const conn = peer.connect(contactId);
-        conn.on('open', () => {
-            conn.close();
-            resolve(true);
-        });
-        conn.on('error', () => resolve(false));
-        setTimeout(() => resolve(false), 2000);
-    });
-}
-
 // Отображение контактов
-async function renderContacts() {
+function renderContacts() {
     contactsList.innerHTML = '';
     
     if (contacts.length === 0) {
@@ -595,13 +554,13 @@ async function renderContacts() {
     
     for (const contactId of contacts) {
         const displayName = contactAliases[contactId] || contactId;
-        const isOnline = failedConnections.has(contactId) ? false : await checkContactStatus(contactId);
+        const isFailed = failedConnections.has(contactId);
         const unreadCount = unreadMessages[contactId] || 0;
         
         const contactElement = document.createElement('div');
         contactElement.className = 'contact';
         contactElement.innerHTML = `
-            <span class="status-indicator ${isOnline ? 'online' : 'offline'}"></span>
+            <span class="status-indicator ${isFailed ? 'offline' : 'unknown'}"></span>
             <span class="contact-name">${displayName}</span>
             ${unreadCount > 0 ? `<span class="unread-count">${unreadCount}</span>` : ''}
             <button class="edit-contact-btn" onclick="editContactName('${contactId}')">✎</button>
