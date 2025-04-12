@@ -38,6 +38,29 @@ const chatArea = document.querySelector('.chat-area');
 const addContactForm = document.querySelector('.add-contact');
 const retryBox = document.querySelector('.retry-box');
 
+// Создаём модальное окно для записи и просмотра видео
+const videoPreviewModal = document.createElement('div');
+videoPreviewModal.className = 'video-preview-modal';
+videoPreviewModal.style.display = 'none';
+videoPreviewModal.innerHTML = `
+    <div class="modal-content">
+        <video id="video-preview" muted autoplay style="border-radius: 50%; width: 200px; height: 200px; object-fit: cover;"></video>
+        <div id="recording-timer" style="text-align: center; margin-top: 10px; font-weight: bold;">0:00</div>
+    </div>
+`;
+document.body.appendChild(videoPreviewModal);
+
+const videoPlaybackModal = document.createElement('div');
+videoPlaybackModal.className = 'video-playback-modal';
+videoPlaybackModal.style.display = 'none';
+videoPlaybackModal.innerHTML = `
+    <div class="modal-content">
+        <video id="video-playback" controls style="width: 400px; height: 400px; object-fit: cover;"></video>
+        <button class="close-modal-btn" style="position: absolute; top: 10px; right: 10px; font-size: 24px;">×</button>
+    </div>
+`;
+document.body.appendChild(videoPlaybackModal);
+
 // Состояние приложения
 let activeConnection = null;
 let activeContact = null;
@@ -57,6 +80,8 @@ const maxReconnectAttempts = 3;
 const reconnectDelay = 3000; // Задержка между попытками переподключения (3 секунды)
 let isReconnecting = false; // Флаг для предотвращения параллельных переподключений
 const failedConnections = new Set(); // Для отслеживания пиров, к которым не удалось подключиться
+let videoStream = null; // Для хранения потока видео
+let recordingStartTime = null; // Для таймера записи
 
 // Инициализация
 peer.on('open', (id) => {
@@ -398,6 +423,16 @@ function startRecording() {
     }
 }
 
+// Таймер для записи видео
+function updateRecordingTimer() {
+    if (!isVideoRecording) return;
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    document.getElementById('recording-timer').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    setTimeout(updateRecordingTimer, 1000);
+}
+
 // Запись видео в кружочке
 function startVideoRecording() {
     if (!activeConnection || !activeContact) return;
@@ -405,8 +440,18 @@ function startVideoRecording() {
     if (!isVideoRecording) {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             .then(stream => {
+                videoStream = stream;
                 mediaRecorder = new MediaRecorder(stream);
                 videoChunks = [];
+                
+                // Показываем превью
+                const videoPreview = document.getElementById('video-preview');
+                videoPreview.srcObject = stream;
+                videoPreviewModal.style.display = 'flex';
+                
+                // Запускаем таймер
+                recordingStartTime = Date.now();
+                updateRecordingTimer();
                 
                 mediaRecorder.ondataavailable = (e) => {
                     videoChunks.push(e.data);
@@ -425,7 +470,11 @@ function startVideoRecording() {
                         saveMessage(message, 'you');
                     };
                     
+                    // Закрываем превью и останавливаем поток
+                    videoPreviewModal.style.display = 'none';
+                    videoPreview.srcObject = null;
                     stream.getTracks().forEach(track => track.stop());
+                    videoStream = null;
                 };
                 
                 mediaRecorder.start();
@@ -641,13 +690,25 @@ function appendMessage(message, sender, index) {
         contentElement.insertBefore(label, img);
     } else if (message.type === 'video') {
         const video = document.createElement('video');
-        video.controls = true;
         video.src = message.content;
         video.classList.add('circle-video');
+        video.style.width = '100px';
+        video.style.height = '100px';
+        video.style.borderRadius = '50%';
+        video.style.objectFit = 'cover';
+        video.controls = true;
         contentElement.appendChild(video);
         const label = document.createElement('div');
         label.textContent = sender === 'you' ? 'Вы (видео):' : `${displayName} (видео):`;
         contentElement.insertBefore(label, video);
+        
+        // При клике на видео открываем его в увеличенном виде
+        video.onclick = () => {
+            const playbackVideo = document.getElementById('video-playback');
+            playbackVideo.src = message.content;
+            videoPlaybackModal.style.display = 'flex';
+            playbackVideo.play();
+        };
     }
     
     messageElement.appendChild(contentElement);
@@ -688,6 +749,24 @@ function updateUI() {
         messageInput.focus();
     }
 }
+
+// Закрытие модального окна для воспроизведения
+document.querySelector('.close-modal-btn').onclick = () => {
+    const playbackVideo = document.getElementById('video-playback');
+    playbackVideo.pause();
+    playbackVideo.src = '';
+    videoPlaybackModal.style.display = 'none';
+};
+
+// Закрытие модального окна при клике вне контента
+videoPlaybackModal.onclick = (e) => {
+    if (e.target === videoPlaybackModal) {
+        const playbackVideo = document.getElementById('video-playback');
+        playbackVideo.pause();
+        playbackVideo.src = '';
+        videoPlaybackModal.style.display = 'none';
+    }
+};
 
 // Обработчики событий
 messageInput.addEventListener('keypress', (e) => {
